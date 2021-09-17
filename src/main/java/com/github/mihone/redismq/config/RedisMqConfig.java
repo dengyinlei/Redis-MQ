@@ -64,6 +64,10 @@ public class RedisMqConfig {
         return queues;
     }
 
+    public static void setQuenes(String[] queues) {
+        RedisMqConfig.queues = queues;
+    }
+
     static {
         Object timeoutParam = YmlUtils.getValue("redis.mq.timeout");
         if (timeoutParam != null) {

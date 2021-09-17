@@ -10,6 +10,8 @@ import com.github.mihone.redismq.log.Log;
 import com.github.mihone.redismq.redis.RedisUtils;
 import com.github.mihone.redismq.reflect.ClassUtils;
 import com.github.mihone.redismq.thread.TaskThread;
+import com.google.common.collect.Sets;
+import org.apache.commons.lang3.StringUtils;
 import redis.clients.jedis.Jedis;
 
 import java.lang.reflect.Method;
@@ -59,8 +61,12 @@ public final class RedisMQ {
 
         List<Class<?>> classes = ClassUtils.getAllClasses(clazz);
         List<Method> methodList = classes.parallelStream().filter(ClassUtils::isRealClass).flatMap(c -> Arrays.stream(c.getMethods())).filter(m -> m.getAnnotation(Queue.class) != null).collect(Collectors.toList());
+        //配置文件中配置的队列名称
+        final String[] queues = RedisMqConfig.getQueues();
+        //通过@quene 注解配置的队列名称
+        Set<String> queueSet = new HashSet<>();
         if (methodList.size() == 0) {
-            threadSize=1;
+            threadSize = 1;
             log.info("there is no queue needs to listen");
         } else {
             threadSize = methodList.size();
@@ -68,6 +74,15 @@ public final class RedisMQ {
                 Queue queue = method.getAnnotation(Queue.class);
                 int threadNum = queue.threadNum();
                 threadSize = threadSize + threadNum -1;
+                if (StringUtils.isNotBlank(queue.value())) {
+                    queueSet.add(queue.value());
+                }
+            }
+            if (queues != null && queues.length > 0) {
+                queueSet.addAll(Sets.newHashSet(queues));
+            }
+            if (queueSet.size() > 0) {
+                RedisMqConfig.setQuenes(queueSet.toArray(new String[queueSet.size()]));
             }
             for (Method method : methodList) {
                 Queue queue = method.getAnnotation(Queue.class);
@@ -105,7 +120,6 @@ public final class RedisMQ {
             log.info("delay queue monitor is created....");
 
             Runnable deadMessageTask = () -> {
-                String[] queues = RedisMqConfig.getQueues();
                 Jedis jedis = RedisUtils.getJedis();
                 try {
                     Arrays.stream(queues).forEach(queue -> {
@@ -128,7 +142,6 @@ public final class RedisMQ {
 
 
             Runnable backMessageTask = () -> {
-                String[] queues = RedisMqConfig.getQueues();
                 Jedis jedis = RedisUtils.getJedis();
                 try {
                     Arrays.stream(queues).forEach(queue -> {
