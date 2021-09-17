@@ -196,23 +196,23 @@ public final class RedisMQ {
     public static class RedisMQInitializer {
         private static final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(threadSize);
         private static final ScheduledExecutorService scheduledThreadPool = Executors.newScheduledThreadPool(4);
-
-        public static Jedis getJedis() {
-            try {
-                Jedis jedis = new Jedis(RedisUtils.getUrl(), RedisUtils.getPort());
-                jedis.auth(RedisUtils.getPassword());
-                return jedis;
-            } catch (Exception e) {
-                log.error("can not get jedis!Cause:{}", e);
-                try {
-                    Thread.sleep(5000);
-                } catch (InterruptedException ex) {
-                    log.error("interrupted when sleeping to reget jedis instance.Cause:{}", ex);
-                    return getJedis();
-                }
-                return getJedis();
-            }
-        }
+//
+//        public static Jedis getJedis() {
+//            try {
+//                Jedis jedis = new Jedis(RedisUtils.getUrl(), RedisUtils.getPort());
+//                jedis.auth(RedisUtils.getPassword());
+//                return jedis;
+//            } catch (Exception e) {
+//                log.error("can not get jedis!Cause:{}", e);
+//                try {
+//                    Thread.sleep(5000);
+//                } catch (InterruptedException ex) {
+//                    log.error("interrupted when sleeping to reget jedis instance.Cause:{}", ex);
+//                    return getJedis();
+//                }
+//                return getJedis();
+//            }
+//        }
     }
 
 
