@@ -12,5 +12,6 @@ import java.lang.annotation.*;
 @Target(ElementType.METHOD)
 public @interface Queue {
     String value();
+    int threadNum() default 1;
 
 }

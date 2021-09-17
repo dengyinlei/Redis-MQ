@@ -59,15 +59,15 @@ public final class RedisUtils {
             }
             Object maxIdle = YmlUtils.getValue(BasicConfig.JEDIS_POOL_PREFIX + ".max-idle");
             if (maxIdle != null) {
-                CONFIG.setMaxTotal(Integer.parseInt(maxIdle.toString()));
+                CONFIG.setMaxIdle(Integer.parseInt(maxIdle.toString()));
             }
             Object minIdle = YmlUtils.getValue(BasicConfig.JEDIS_POOL_PREFIX + ".min-idle");
             if (minIdle != null) {
-                CONFIG.setMaxTotal(Integer.parseInt(minIdle.toString()));
+                CONFIG.setMinIdle(Integer.parseInt(minIdle.toString()));
             }
             Object maxWait = YmlUtils.getValue(BasicConfig.JEDIS_POOL_PREFIX + ".max-wait");
             if (maxWait != null) {
-                CONFIG.setMaxTotal(Integer.parseInt(maxWait.toString()));
+                CONFIG.setMaxWaitMillis(Integer.parseInt(maxWait.toString()));
             }
         }
 

@@ -9,6 +9,7 @@ import com.github.mihone.redismq.json.JsonUtils;
 import com.github.mihone.redismq.log.Log;
 import com.github.mihone.redismq.redis.RedisUtils;
 import com.github.mihone.redismq.reflect.ClassUtils;
+import com.github.mihone.redismq.thread.TaskThread;
 import redis.clients.jedis.Jedis;
 
 import java.lang.reflect.Method;
@@ -65,14 +66,19 @@ public final class RedisMQ {
             threadSize = methodList.size();
             for (Method method : methodList) {
                 Queue queue = method.getAnnotation(Queue.class);
+                int threadNum = queue.threadNum();
+                threadSize = threadSize + threadNum -1;
+            }
+            for (Method method : methodList) {
+                Queue queue = method.getAnnotation(Queue.class);
                 String queueName = queue.value();
+                int threadNum = queue.threadNum();
                 Cache.writeToMethodCache(queueName, method);
-                Runnable task = () -> {
-                    Jedis jedis = RedisMQInitializer.getJedis();
-                    jedis.subscribe(new ConsumeHandler(), queueName);
-                };
-                Future<?> future = RedisMQInitializer.fixedThreadPool.submit(task);
-                queueListeners.put(task, future);
+                for (int i = 0; i < threadNum; i++) {
+                    Runnable task = new TaskThread(queueName, i + 1);
+                    Future<?> future = RedisMQInitializer.fixedThreadPool.submit(task);
+                    queueListeners.put(task, future);
+                }
             }
             log.info("queue listeners is created");
         }
@@ -187,11 +193,11 @@ public final class RedisMQ {
         return beanProvider;
     }
 
-    private static class RedisMQInitializer {
+    public static class RedisMQInitializer {
         private static final ExecutorService fixedThreadPool = Executors.newFixedThreadPool(threadSize);
         private static final ScheduledExecutorService scheduledThreadPool = Executors.newScheduledThreadPool(4);
 
-        private static Jedis getJedis() {
+        public static Jedis getJedis() {
             try {
                 Jedis jedis = new Jedis(RedisUtils.getUrl(), RedisUtils.getPort());
                 jedis.auth(RedisUtils.getPassword());

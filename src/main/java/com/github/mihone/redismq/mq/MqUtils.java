@@ -52,13 +52,13 @@ public final class MqUtils {
         String className = data.getClass().getName();
         Message message = new Message(messageId,className,timeStamp,data);
         long delayMills = unit.toMillis(delay);
-        Jedis jedis = RedisUtils.getJedis();
-        final byte[] msgBytes = JsonUtils.convertToBytes(message);
-        if (msgBytes == null) {
-            return;
+        try (Jedis jedis = RedisUtils.getJedis()) {
+            final byte[] msgBytes = JsonUtils.convertToBytes(message);
+            if (msgBytes == null) {
+                return;
+            }
+            jedis.zadd((queue+BasicConfig.DELAY_QUEUE_SUFFIX).getBytes(),timeStamp+delayMills, msgBytes);
         }
-        jedis.zadd((queue+BasicConfig.DELAY_QUEUE_SUFFIX).getBytes(),timeStamp+delayMills, msgBytes);
-        jedis.close();
     }
 
 
@@ -73,61 +73,58 @@ public final class MqUtils {
         if (queue == null) {
             throw new IllegalArgumentException("queue name can not be null");
         }
-        Jedis jedis = RedisUtils.getJedis();
-        Map<String, String> pubsubNumSub = jedis.pubsubNumSub(queue);
-        int count = Integer.parseInt(pubsubNumSub.get(queue));
-        if (count > 0) {
-            return null;
-        } else {
-            byte[] msg = jedis.rpoplpush((queue + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), (queue + BasicConfig.BACK_QUEUE_SUFFIX).getBytes());
-            if (msg == null) {
+        try (Jedis jedis = RedisUtils.getJedis()) {
+            Map<String, String> pubsubNumSub = jedis.pubsubNumSub(queue);
+            int count = Integer.parseInt(pubsubNumSub.get(queue));
+            if (count > 0) {
                 return null;
-            }
-            Message message = JsonUtils.convertObjectFromBytes(msg, Message.class);
-            String className = message.getClassName();
-            try {
-                Object result = JsonUtils.convertObjectFromBytes(JsonUtils.convertToBytes(message.getBody()),Class.forName(className));
-                jedis.lrem((queue + BasicConfig.BACK_QUEUE_SUFFIX).getBytes(),0,msg);
-                return result;
-            } catch (ClassNotFoundException e) {
-                log.error("can not resolve class.Class:{},Cause:{}", className, e);
-                throw new ClassResolveFailedException("can not resolve class.");
-            } finally {
-                jedis.close();
+            } else {
+                byte[] msg = jedis.rpoplpush((queue + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), (queue + BasicConfig.BACK_QUEUE_SUFFIX).getBytes());
+                if (msg == null) {
+                    return null;
+                }
+                Message message = JsonUtils.convertObjectFromBytes(msg, Message.class);
+                String className = message.getClassName();
+                try {
+                    Object result = JsonUtils.convertObjectFromBytes(JsonUtils.convertToBytes(message.getBody()),Class.forName(className));
+                    jedis.lrem((queue + BasicConfig.BACK_QUEUE_SUFFIX).getBytes(),0,msg);
+                    return result;
+                } catch (ClassNotFoundException e) {
+                    log.error("can not resolve class.Class:{},Cause:{}", className, e);
+                    throw new ClassResolveFailedException("can not resolve class.");
+                }
             }
         }
     }
 
     static void send(String queue, byte[] msgBytes, String messageId) {
         ThreadUtils.submit(() -> {
-            Jedis jedis = RedisUtils.getJedis();
-            Long result = jedis.lpush(queue.getBytes(), msgBytes);
-            Map<String, String> pubsubNumSub = jedis.pubsubNumSub(queue);
-            if (Integer.parseInt(pubsubNumSub.get(queue)) == 0) {
+            try (Jedis jedis = RedisUtils.getJedis()) {
+                Long result = jedis.lpush(queue.getBytes(), msgBytes);
+                Map<String, String> pubsubNumSub = jedis.pubsubNumSub(queue);
+                if (Integer.parseInt(pubsubNumSub.get(queue)) == 0) {
+                    jedis.lrem(queue.getBytes(), 0, msgBytes);
+                    jedis.lpush((queue + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), msgBytes);
+                    return;
+                }
+                int count = 0;
+                while (count <= RedisMqConfig.getTimeout()) {
+                    long reply = jedis.publish(queue, messageId);
+                    try {
+                        if (reply == 0) {
+                            count++;
+                            Thread.sleep(1000);
+                        } else {
+                            return;
+                        }
+                    } catch (InterruptedException e) {
+                        log.error("sleep state is interrupted.Cause:{}", e);
+                        break;
+                    }
+                }
                 jedis.lrem(queue.getBytes(), 0, msgBytes);
                 jedis.lpush((queue + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), msgBytes);
-                jedis.close();
-                return;
             }
-            int count = 0;
-            while (count <= RedisMqConfig.getTimeout()) {
-                long reply = jedis.publish(queue, messageId);
-                try {
-                    if (reply == 0) {
-                        count++;
-                        Thread.sleep(1000);
-                    } else {
-                        jedis.close();
-                        return;
-                    }
-                } catch (InterruptedException e) {
-                    log.error("sleep state is interrupted.Cause:{}", e);
-                    break;
-                }
-            }
-            jedis.lrem(queue.getBytes(), 0, msgBytes);
-            jedis.lpush((queue + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), msgBytes);
-            jedis.close();
         });
     }
 

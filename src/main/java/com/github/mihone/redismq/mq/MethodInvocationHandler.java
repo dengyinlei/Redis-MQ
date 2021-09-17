@@ -21,17 +21,17 @@ public final class MethodInvocationHandler {
     private static final Log log = Log.getLogger(MethodInvocationHandler.class);
 
     static void handler(Method method, String channel, String messageId) {
-        Jedis jedis = RedisUtils.getJedis();
-        Class<?> clazz = method.getDeclaringClass();
-        Object apply = RedisMQ.getBeanProvider().apply(clazz);
-        if (clazz.isInstance(apply)) {
-            String result = jedis.set(channel + ":" + messageId, BasicConfig.MESSAGE_LOCK_EXPIRE_TIME + "", SetParams.setParams().nx().px(BasicConfig.MESSAGE_LOCK_EXPIRE_TIME));
-            if (result != null) {
-                doHandler(jedis, method, channel, apply, true);
+        try(Jedis jedis = RedisUtils.getJedis()){
+            Class<?> clazz = method.getDeclaringClass();
+            Object apply = RedisMQ.getBeanProvider().apply(clazz);
+            if (clazz.isInstance(apply)) {
+                String result = jedis.set(channel + ":" + messageId, BasicConfig.MESSAGE_LOCK_EXPIRE_TIME + "", SetParams.setParams().nx().px(BasicConfig.MESSAGE_LOCK_EXPIRE_TIME));
+                if (result != null) {
+                    doHandler(jedis, method, channel, apply, true);
+                }
+            } else {
+                log.warn("can not get the bean instance by the given bean provider.Class:{},Cause:{}", clazz, new BeanAcquiredException().getStackMessage());
             }
-            jedis.close();
-        } else {
-            log.warn("can not get the bean instance by the given bean provider.Class:{},Cause:{}", clazz, new BeanAcquiredException().getStackMessage());
         }
     }
 
@@ -41,11 +41,11 @@ public final class MethodInvocationHandler {
         Class<?> clazz = method.getDeclaringClass();
         Object apply = RedisMQ.getBeanProvider().apply(clazz);
         if (clazz.isInstance(apply)) {
-            Jedis jedis = RedisUtils.getJedis();
-            while (jedis.lrange((channel + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), 0, -1).size() > 0) {
-                doHandler(jedis, method, channel, apply, false);
+            try(Jedis jedis = RedisUtils.getJedis()){
+                while (jedis.lrange((channel + BasicConfig.DEAD_QUEUE_SUFFIX).getBytes(), 0, -1).size() > 0) {
+                    doHandler(jedis, method, channel, apply, false);
+                }
             }
-            jedis.close();
         } else {
             log.warn("can not get the bean instance by the given bean provider.Class:{},Cause:{}", clazz, new BeanAcquiredException().getStackMessage());
         }
@@ -119,7 +119,6 @@ public final class MethodInvocationHandler {
             }
         }
         jedis.lrem((channel + BasicConfig.BACK_QUEUE_SUFFIX).getBytes(), 0, msgBytes);
-        jedis.close();
     }
 
     private static int execute(Method method0, Object apply, Object[] args) {
