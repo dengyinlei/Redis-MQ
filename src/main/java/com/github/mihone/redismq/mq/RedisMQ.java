@@ -10,6 +10,7 @@ import com.github.mihone.redismq.log.Log;
 import com.github.mihone.redismq.redis.RedisUtils;
 import com.github.mihone.redismq.reflect.ClassUtils;
 import com.github.mihone.redismq.thread.TaskThread;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
 import redis.clients.jedis.Jedis;
@@ -59,7 +60,8 @@ public final class RedisMQ {
         Map<String, Runnable> monitorNames = new HashMap<>();
         Map<Runnable, Future> monitors = new HashMap<>();
 
-        List<Class<?>> classes = ClassUtils.getAllClasses(clazz);
+//        List<Class<?>> classes = ClassUtils.getAllClasses(clazz);
+        List<Class<?>> classes = Lists.newArrayList(clazz);
         List<Method> methodList = classes.parallelStream().filter(ClassUtils::isRealClass).flatMap(c -> Arrays.stream(c.getMethods())).filter(m -> m.getAnnotation(Queue.class) != null).collect(Collectors.toList());
         //配置文件中配置的队列名称
         final String[] queues = RedisMqConfig.getQueues();
